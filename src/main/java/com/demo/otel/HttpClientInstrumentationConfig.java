@@ -20,19 +20,13 @@ public class HttpClientInstrumentationConfig {
     private OpenTelemetry openTelemetry;
 
     /**
-     * 配置OkHttp客户端 - 使用新的API
+     * 配置原生OkHttp客户端
+     * OpenTelemetry Java Agent会自动为其添加追踪功能
      */
     @Bean
     @Primary
     public OkHttpClient instrumentedOkHttpClient() {
-        // 使用新的API创建OkHttp telemetry
-        OkHttpTelemetry okHttpTelemetry = OkHttpTelemetry.builder(openTelemetry)
-                .setCapturedRequestHeaders("Authorization", "Content-Type", "Accept")
-                .setCapturedResponseHeaders("Content-Type", "Content-Length")
-                .build();
-
-        // 使用新的API创建instrumented的OkHttpClient
-        return okHttpTelemetry.newClientBuilder()
+        return new OkHttpClient.Builder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .readTimeout(Duration.ofSeconds(30))
                 .writeTimeout(Duration.ofSeconds(30))

@@ -92,7 +92,7 @@
             <artifactId>opentelemetry-api</artifactId>
         </dependency>
 
-        <dependency>
+        <!--<dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-sdk</artifactId>
         </dependency>
@@ -100,17 +100,17 @@
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
-        </dependency>
+        </dependency>-->
 
         <!-- OpenTelemetry Spring Boot Integration -->
-        <dependency>
+        <!--<dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-spring-boot-starter</artifactId>
             <version>2.18.0</version>
-        </dependency>
+        </dependency>-->
 
         <!-- OpenTelemetry Auto-instrumentation -->
-        <dependency>
+        <!--<dependency>
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-okhttp-3.0</artifactId>
             <version>2.16.0-alpha</version>
@@ -124,13 +124,13 @@
             <groupId>io.opentelemetry.instrumentation</groupId>
             <artifactId>opentelemetry-lettuce-5.1</artifactId>
             <version>2.16.0-alpha</version>
-        </dependency>
+        </dependency>-->
 
         <!-- Micrometer OpenTelemetry Bridge -->
-        <dependency>
+        <!--<dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
-        </dependency>
+        </dependency>-->
 
         <!-- 推荐的HTTP客户端 -->
         <dependency>

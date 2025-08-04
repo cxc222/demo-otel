@@ -13,7 +13,6 @@ import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
-import io.opentelemetry.instrumentation.okhttp.v3_0.OkHttpTelemetry;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
@@ -30,41 +29,28 @@ public class HttpClientPerformanceConfig {
     }
 
     /**
-     * 高性能OkHttp客户端配置
+     * 高性能OkHttp客户端配置 - 使用原生API
+     * OpenTelemetry Java Agent会自动添加追踪功能
      */
-    @Bean
-    public OkHttpClient highPerformanceOkHttpClient(OpenTelemetry openTelemetry,
-                                                    HttpClientProperties properties) {
-
-        OkHttpTelemetry telemetry = OkHttpTelemetry.builder(openTelemetry)
-                .setCapturedRequestHeaders(properties.getCapturedRequestHeaders())
-                .setCapturedResponseHeaders(properties.getCapturedResponseHeaders())
-                .build();
-
+    @Bean("highPerformanceOkHttpClient")
+    public OkHttpClient highPerformanceOkHttpClient(HttpClientProperties properties) {
         return new OkHttpClient.Builder()
-                // 追踪配置
-                .addInterceptor(telemetry.newInterceptor())
-
                 // 连接池配置 - 重用连接提高性能
                 .connectionPool(new ConnectionPool(
                         properties.getMaxIdleConnections(),    // 最大空闲连接数
                         properties.getKeepAliveDuration(),     // 连接保持时间
                         TimeUnit.MINUTES
                 ))
-
                 // 超时配置
                 .connectTimeout(Duration.ofMillis(properties.getConnectTimeout()))
                 .readTimeout(Duration.ofMillis(properties.getReadTimeout()))
                 .writeTimeout(Duration.ofMillis(properties.getWriteTimeout()))
                 .callTimeout(Duration.ofMillis(properties.getCallTimeout()))
-
                 // 重试配置
                 .retryOnConnectionFailure(properties.isRetryOnConnectionFailure())
-
                 // 重定向配置
                 .followRedirects(properties.isFollowRedirects())
                 .followSslRedirects(properties.isFollowSslRedirects())
-
                 // 请求/响应大小限制
                 .addInterceptor(chain -> {
                     okhttp3.Request request = chain.request();
@@ -157,36 +143,44 @@ public class HttpClientPerformanceConfig {
 
     /**
      * 自定义错误处理器
+     * 可以添加span属性，但span本身由Java Agent管理
      */
     public static class CustomResponseErrorHandler implements org.springframework.web.client.ResponseErrorHandler {
 
         @Override
         public boolean hasError(org.springframework.http.client.ClientHttpResponse response)
                 throws java.io.IOException {
-            return !response.getStatusCode().equals(org.springframework.http.HttpStatus.OK);
+            return !response.getStatusCode().is2xxSuccessful();
         }
 
         @Override
         public void handleError(org.springframework.http.client.ClientHttpResponse response)
                 throws java.io.IOException {
 
-            // 记录错误信息到当前span
-            io.opentelemetry.api.trace.Span currentSpan = io.opentelemetry.api.trace.Span.current();
-            currentSpan.setAttribute("http.error.status_code", response.getStatusCode().value());
-            currentSpan.setAttribute("http.error.reason", response.getStatusText());
+            // 记录错误信息到当前span（如果存在）
+            try {
+                io.opentelemetry.api.trace.Span currentSpan = io.opentelemetry.api.trace.Span.current();
+                if (currentSpan != null) {
+                    currentSpan.setAttribute("http.error.status_code", response.getStatusCode().value());
+                    currentSpan.setAttribute("http.error.reason", response.getStatusText());
 
-            // 根据状态码进行不同处理
+                    // 根据状态码进行不同处理
+                    HttpStatusCode statusCode = response.getStatusCode();
+                    currentSpan.setAttribute("error.type",
+                            statusCode.is4xxClientError() ? "client_error" : "server_error");
+                }
+            } catch (Exception e) {
+                // 忽略span处理错误，不影响主要业务逻辑
+                System.err.println("Warning: Failed to add error attributes to span: " + e.getMessage());
+            }
+
             HttpStatusCode statusCode = response.getStatusCode();
             if (statusCode.equals(HttpStatus.NOT_FOUND)) {
-                currentSpan.setAttribute("error.type", "client_error");
-                if (statusCode.equals(HttpStatus.NOT_FOUND)) {
-                    throw new RuntimeException("Resource not found: " + response.getStatusText());
-                } else if (statusCode.equals(HttpStatus.UNAUTHORIZED)) {
-                    throw new RuntimeException("Unauthorized access: " + response.getStatusText());
-                }
-            } else if (statusCode.equals(HttpStatus.INTERNAL_SERVER_ERROR)) {
-                currentSpan.setAttribute("error.type", "server_error");
-                throw new RuntimeException("Server error: " + response.getStatusText());
+                throw new RuntimeException("Resource not found: " + response.getStatusText());
+            } else if (statusCode.equals(HttpStatus.UNAUTHORIZED)) {
+                throw new RuntimeException("Unauthorized access: " + response.getStatusText());
+            } else if (statusCode.is5xxServerError()) {
+                throw new RuntimeException("Server error: " + response.getStatusCode() + " " + response.getStatusText());
             }
 
             throw new RuntimeException("HTTP error: " + response.getStatusCode() + " " + response.getStatusText());
